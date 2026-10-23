@@ -39,7 +39,7 @@
 
   <section class="card">
     <strong>🎙️ Alexa+ simulator</strong>
-    <div class="small">Mic dabao (Chrome) ya type karo. Hinglish chalta hai.</div>
+    <div class="small">Mic dabao, suna hua text check karo, phir Bhejo dabao. Hinglish chalta hai.</div>
     <div class="row" style="margin-top:10px">
       <input id="cmd" placeholder="Ramesh ke naam 200 ka udhaar likho" autocomplete="off">
       <button id="send">Bhejo</button>
@@ -78,13 +78,53 @@ async function send(){
   const d = await res.json();
   $('reply').textContent = (d.ok===false?'⚠️ ':'✅ ') + d.message;
   $('draft').innerHTML = d.draft ? d.draft.replace(/</g,'&lt;') + (d.whatsapp_link?`<br><a target="_blank" rel="noopener" href="${d.whatsapp_link}">WhatsApp pe bhejo →</a>`:'') : '';
-  speak(d.message); $('cmd').value=''; refresh();
+  if(d.ok!==false){ speak(d.message); $('cmd').value=''; refresh(); }
 }
 $('send').onclick = send;
 $('cmd').addEventListener('keydown', e => { if(e.key==='Enter') send(); });
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-if(!SR){ $('mic').style.display='none'; } else {
-  $('mic').onclick = () => { const r=new SR(); r.lang='hi-IN'; r.onresult=e=>{$('cmd').value=e.results[0][0].transcript; send();}; r.start(); };
+if(!SR){
+  $('mic').disabled=true;
+  $('reply').textContent='Is browser mein voice input supported nahi hai. Latest Chrome mein page kholkar try karo.';
+} else {
+  $('mic').onclick = () => {
+    const r=new SR();
+    let heardFinal=false;
+    let recognitionFailed=false;
+    r.lang='hi-IN';
+    r.interimResults=true;
+    r.maxAlternatives=1;
+    r.onstart=()=>{$('reply').textContent='Sun raha hai… bolna shuru karo.';};
+    r.onresult=e=>{
+      let transcript='';
+      for(let i=0;i<e.results.length;i++) transcript+=e.results[i][0].transcript;
+      $('cmd').value=transcript.trim();
+      heardFinal=Array.from(e.results).some(result=>result.isFinal);
+      $('reply').textContent=heardFinal
+        ? `Suna: “${transcript.trim()}” — check karke Bhejo dabao.`
+        : `Suna ja raha hai: “${transcript.trim()}”`;
+    };
+    r.onerror=e=>{
+      recognitionFailed=true;
+      const messages={
+        'not-allowed':'Microphone permission blocked hai. Address bar ke lock icon se mic allow karo.',
+        'service-not-allowed':'Browser ne speech recognition service block ki hai.',
+        'audio-capture':'Microphone nahi mil raha. Mic connection aur Windows permission check karo.',
+        'no-speech':'Awaaz nahi mili. Mic ke paas bolkar phir try karo.',
+        'network':'Speech recognition ke liye internet connection check karke try karo.',
+        'aborted':'Voice input band ho gaya. Mic dabakar phir try karo.'
+      };
+      $('reply').textContent='⚠️ '+(messages[e.error]||`Voice input error: ${e.error}`);
+    };
+    r.onend=()=>{
+      if(!heardFinal&&!recognitionFailed) $('reply').textContent='Awaaz samajh nahi aayi. Mic dabakar dobara bolkar try karo.';
+    };
+    try {
+      r.start();
+    } catch(e) {
+      $('reply').textContent=`⚠️ Mic start nahi hua: ${e.message}`;
+    }
+  };
 }
 refresh();
 </script>
